@@ -27,7 +27,7 @@ bun tsgo --noEmit    # Type check
 - **Database**: Drizzle ORM + PostgreSQL
 - **State**: TanStack Query
 - **Auth**: Better Auth (magic links, passkeys only)
-- **UI**: shadcn/ui + Tailwind v4
+- **UI**: shadcn/ui + Tailwind v4 (use Field components for forms)
 - **Toasts**: Sonner for form feedback
 - **Quality**: oxlint + oxfmt
 
@@ -137,7 +137,7 @@ function EditName() {
   )
 }
 
-// ✅ DO
+// ✅ DO - use shadcn Field components + Sonner toasts
 function EditName() {
   const [isPending, startTransition] = useTransition()
   const { mutate } = useUpdateUser({
@@ -159,7 +159,11 @@ function EditName() {
 
   return (
     <form action={handleSubmit}>
-      <Input name="name" />
+      <Field>
+        <FieldLabel htmlFor="name">Name</FieldLabel>
+        <Input id="name" name="name" />
+        <FieldDescription>Your display name</FieldDescription>
+      </Field>
       <Button disabled={isPending}>Save</Button>
     </form>
   )
