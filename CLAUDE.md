@@ -28,6 +28,7 @@ bun tsgo --noEmit    # Type check
 - **State**: TanStack Query
 - **Auth**: Better Auth (magic links, passkeys only)
 - **UI**: shadcn/ui + Tailwind v4
+- **Toasts**: Sonner for form feedback
 - **Quality**: oxlint + oxfmt
 
 ## Core Principles
@@ -100,26 +101,37 @@ function UserProfile({ id }: { id: string }) {
 
 ### Form Mutations
 
-Shows: useTransition, TanStack mutations, Zod validation
+Shows: useTransition, TanStack mutations, Zod validation, Sonner toasts
 
 ```tsx
 // ❌ DON'T
 function EditName() {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const handleSubmit = async () => {
     setSaving(true)
-    await fetch('/api/user', {
-      method: 'PATCH',
-      body: JSON.stringify({ name }),
-    })
+    setError(null)
+    setSuccess(false)
+    try {
+      await fetch('/api/user', {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
+      })
+      setSuccess(true)
+    } catch (e) {
+      setError('Failed to save')
+    }
     setSaving(false)
   }
 
   return (
     <form onSubmit={handleSubmit}>
       <Input value={name} onChange={e => setName(e.target.value)} />
+      {error && <p className="text-red-500">{error}</p>}
+      {success && <p className="text-green-500">Saved!</p>}
       <Button disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
     </form>
   )
@@ -128,11 +140,17 @@ function EditName() {
 // ✅ DO
 function EditName() {
   const [isPending, startTransition] = useTransition()
-  const { mutate } = useUpdateUser()
+  const { mutate } = useUpdateUser({
+    onSuccess: () => toast.success('Name updated'),
+    onError: (e) => toast.error(e.message),
+  })
 
   const handleSubmit = (formData: FormData) => {
     const result = nameSchema.safeParse(formData.get('name'))
-    if (!result.success) return
+    if (!result.success) {
+      toast.error('Invalid name')
+      return
+    }
 
     startTransition(() => {
       mutate({ name: result.data })
