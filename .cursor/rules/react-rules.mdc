@@ -4,111 +4,265 @@ globs: *.tsx,**/ui/**/*.ts
 alwaysApply: false
 ---
 
-# 1. Use as little React as possible
+## TypeScript
 
-- Keep components small - less than 100 lines
-- Views reference components
-- Remove as much logic as possible from components and views
-- Externalize functions rather and keep external functions _vanilla typescript_
-- Vanilla typescript is easier to test, and package for other uses
+- **Avoid casting** - no `as Type`, never `as any`
+- **Infer types** - let TypeScript figure it out
+- **Zod at boundaries** - validate external data at API edges
+- **Nullish coalescing** - use `??` over `||`
+- **Discriminated unions** - for type-safe state machines
 
-## 2. Avoid using useEffect
+## React Patterns
 
-- Avoid using useEffect to fetch data or initialise state
-- Use hooks, tanstack query, or the new `use` feature in react 19
-- use useEffect to update state when something else changes
+- **TanStack Query** for all server state
+- **useTransition** for non-blocking UI updates
+- **Local variables** over useState when possible
+- **Suspense** for loading states
+- **No useEffect for data** - use TanStack Query or `use()`
 
-## 3. Use useState sparingly
+## Component Rules
 
-- Using a local variable is often more optimal - even if something has to be calculated
-- useState uses reducers under the hood
-- If you have more than 3 useStates you might as well use reducers
+- **< 100 lines** - extract logic to vanilla TS
+- **Pre-styled with variants** - not style props
+- **Flexbox + gap** - no margin on components
+- **kebab-case files** - named exports only
 
-## 4. Use React.FC and expand props
+---
 
-- Expand props so that each parameter is named
-- It's easier to know which props are not used
+## Examples
 
-## 5. Avoid globals and global state
+### Data Fetching
 
-- Globals including auth globals, often lead to race conditions
-- Global state is only useful in rare cases. SPAs with signifant complexity
-- Start with reducers which are passed through props
-- If that's too complicated, use React context
-- As a last resort for very complicated SPAs - use zustand
+Shows: TanStack Query, no useEffect, no casting, Suspense
 
-## 6. Use reducers
+```tsx
+// ❌ DON'T
+function UserProfile({ id }: { id: string }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
-- Reducers are great - read up on them and understand them
-- They keep all state update logic in one place
-- They are vanilla typescript - keep them that way
-- Use them to update state based on other state.
-- Note that updating any part of the state returned from a reducer will cause a re-render if the whole state is a parameter - you can pass just parts of it
+  useEffect(() => {
+    fetch(`/api/users/${id}`)
+      .then(res => res.json())
+      .then(data => {
+        setUser(data as User)  // casting
+        setLoading(false)
+      })
+  }, [id])
 
-## 7. Avoid passing style to components
+  if (loading) return <Spinner />
+  return <div>{user?.name}</div>
+}
 
-- Avoid passing styles to components, or styling your components in views
-- Create a component that is pre-styled
-- Create variants - e.g. small, medium, large - rather than size={18}
-- Avoid using styles in views as much as possible
+// ✅ DO
+function UserProfile({ id }: { id: string }) {
+  const { data: user } = useSuspenseQuery({
+    queryKey: ['user', id],
+    queryFn: () => getUser(id),  // returns typed User
+  })
 
-## 8. Use the theme
+  return <div>{user.name}</div>
+}
+```
 
-- Create constants for your theme or use a consistent structure
-- Use the theme fonts and colors
-- Avoid naming fonts and inluding color values directly in views and components
+### Form Mutations
 
-## 9. Use flexbox
+Shows: useTransition, TanStack mutations, Zod validation
 
-- Use flexbox for every component
+```tsx
+// ❌ DON'T
+function EditName() {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
 
-## 10. Avoid margin
+  const handleSubmit = async () => {
+    setSaving(true)
+    await fetch('/api/user', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    })
+    setSaving(false)
+  }
 
-- Don't pre-add padding or margin to the outside of components, unless there is a specific reason to
-- Use flexbox gap instead
+  return (
+    <form onSubmit={handleSubmit}>
+      <Input value={name} onChange={e => setName(e.target.value)} />
+      <Button disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+    </form>
+  )
+}
 
-## 11. Use kebab-case for file names
+// ✅ DO
+function EditName() {
+  const [isPending, startTransition] = useTransition()
+  const { mutate } = useUpdateUser()
 
-- Use PascalCase for component names, but kebab case for file-names
-- PascalCase can often give you issues in git as case sensitive file names is not supported on all platforms
+  const handleSubmit = (formData: FormData) => {
+    const result = nameSchema.safeParse(formData.get('name'))
+    if (!result.success) return
 
-## 12. Create a component library
+    startTransition(() => {
+      mutate({ name: result.data })
+    })
+  }
 
-- If using a 3rd party component library, wrap those components then include your wrapped components. It makes it easier to change libraries
-- Shadcn makes this easy - it includes the source in your repo, and imports only primitives from that source.
-- You don't need to wrap Shadcn generated components - just edit the component source with your changes
-- Don't create duplicates of components for minor variations. Create a variation
-- Customise the component if there's a new variation - don't style from the outside
-- Put your components into a high level components folder
-- Use an aliases or subpath imports "~" to import components from views.
+  return (
+    <form action={handleSubmit}>
+      <Input name="name" />
+      <Button disabled={isPending}>Save</Button>
+    </form>
+  )
+}
+```
 
-## 13. Avoid hard coding width or height
+### Component Styling
 
-- Use flexbox and create rules for screen sizes
+Shows: variants not props, theme vars, flexbox + gap, no margin
 
-## 14. Use a show prop if you need to hide something
+```tsx
+// ❌ DON'T
+function Card({ children, padding = 16, margin = 8 }: Props) {
+  return (
+    <div className="bg-[#1a1a1a] rounded-lg" style={{ padding, margin }}>
+      {children}
+    </div>
+  )
+}
 
-- Avoid code that conditionally shows a complex component - this creates janky ui
-- Instead use the display css property to hide or show - this will precalculate everything in the component but not render it
+// Usage with external styling
+<div className="mt-4">
+  <Card padding={24} margin={0}>{content}</Card>
+</div>
 
-## 15. Use eslint or equivalent
+// ✅ DO
+function Card({ children, size = 'md' }: Props) {
+  return (
+    <div className={cn(
+      'bg-card rounded-lg',
+      size === 'sm' && 'p-2',
+      size === 'md' && 'p-4',
+      size === 'lg' && 'p-6',
+    )}>
+      {children}
+    </div>
+  )
+}
 
-- Ensure the rules of hooks linting rule is on
-- Check out 0xlint and Biome
+// Parent controls spacing with gap
+<div className="flex flex-col gap-4">
+  <Card size="md">{content}</Card>
+</div>
+```
 
-## 16. Views are routes
+### Logic Extraction
 
-- All views should be routable - meaning you can get to them via a route
-- No view should rely on variables or parameters from another
-- A view can be accessed in any order
-- Pass params on the url. You can use url segments for ids, search params should be optional
-- Name views with the same name as the route - or place in a folder with that name
+Shows: vanilla TS functions, small components, type inference
 
-## 17. Avoid default exports
+```tsx
+// ❌ DON'T - logic mixed in component
+function PriceDisplay({ items }: { items: Item[] }) {
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const tax = subtotal * 0.1
+  const shipping = subtotal > 100 ? 0 : 10
+  const total = subtotal + tax + shipping
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(total)
 
-- It's more efficient to export the component directly than to import a default
-- Avoid barrelled imports as much as possible _unless_ you are planning to package that library for others
+  return <span>{formatted}</span>
+}
 
-## 18. Use bun
+// ✅ DO - pure functions extracted
+// lib/pricing.ts
+export function calculateTotal(items: Item[]) {
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  const tax = subtotal * 0.1
+  const shipping = subtotal > 100 ? 0 : 10
+  return subtotal + tax + shipping
+}
 
-- Bun is faster to use than pnpm and npm
+export function formatCurrency(amount: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}
+
+// component
+function PriceDisplay({ items }: { items: Item[] }) {
+  const total = calculateTotal(items)
+  return <span>{formatCurrency(total)}</span>
+}
+```
+
+### File & Export Patterns
+
+Shows: kebab-case files, named exports, inline skeletons
+
+```
+// ❌ DON'T
+src/
+  components/
+    UserProfile.tsx          // PascalCase file
+    UserProfileSkeleton.tsx  // separate skeleton
+  pages/
+    Dashboard.tsx            // doesn't match route
+
+// UserProfile.tsx
+export default function UserProfile() { ... }
+
+// ✅ DO
+src/
+  components/
+    user-profile.tsx         // kebab-case
+  routes/
+    dashboard.tsx            // route = /dashboard
+
+// user-profile.tsx
+export function UserProfile() {
+  const { data, isLoading } = useUser()
+
+  if (isLoading) {
+    return <Skeleton className="h-20 w-full" />  // inline skeleton
+  }
+
+  return <div>{data.name}</div>
+}
+```
+
+### API Routes
+
+Shows: Zod validation, Drizzle queries, error handling
+
+```ts
+// ❌ DON'T
+export async function POST(req: Request) {
+  const body = await req.json()
+  const user = body as CreateUserInput  // casting
+
+  const result = await db.insert(users).values({
+    name: user.name,
+    email: user.email,
+  })
+
+  return Response.json(result)
+}
+
+// ✅ DO
+export async function POST(req: Request) {
+  const body = await req.json()
+  const parsed = createUserSchema.safeParse(body)
+
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error }, { status: 400 })
+  }
+
+  const [user] = await db
+    .insert(users)
+    .values(parsed.data)
+    .returning()
+
+  return Response.json(user)
+}
+```
